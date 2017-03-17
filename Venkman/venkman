@@ -30,7 +30,8 @@ Venkman also checks the currently logged in user.
 
 Author: Darryl Lane
 Twitters: @darryllane101
-Github:
+Github: https://github.com/darryllane/venkman
+Version: 1.0
 '''
 parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter)
 

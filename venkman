@@ -1,0 +1,271 @@
+#!/usr/bin/python
+
+import os
+import threading
+import subprocess
+import re
+import argparse
+import netaddr
+import random
+import sys
+import socket
+import time
+import datetime
+import traceback
+from argparse import RawTextHelpFormatter
+print"""
+      (`-.     ('-.      .-')
+    _(OO  )_ _(  OO)    ( OO )
+,--(_/   ,. (,------,--./ ,-- ,--. ,--.,--.   ,--.  .. --. ,--.  ,--,
+\   \   /(__/|  .---|   \ |  ||  .'   /|   `.'   | |  -.  \|   \ |  |
+ \   \ /   / |  |   |    \|  ||      / |         . ' '  |  |    \|  |
+  \   '   /,(|  '--.|  .     ||     '  |  |'.'|  | | |_.'  |  .     |
+   \     /__)|  .--'|  |\    ||  .   \ |  |   |  | |  .-.  |  |\    |
+    \   /    |  `---|  | \   ||  |\   \|  |   |  | |  | |  |  | \   |
+     `-'     `------`--'  `--'`--' '--'`--'   `--' `--' `--`--'  `--'
+"""
+print '''
+Used to identify services being authenticated with accounts of interest.
+Venkman also checks the currently logged in user.
+
+Author: Darryl Lane
+Twitters: @darryllane101
+Github:
+'''
+parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter)
+
+group = parser.add_mutually_exclusive_group(required=True)
+group2 = parser.add_mutually_exclusive_group(required=True)
+group.add_argument('-sl', help='Used to supply a file containing all servers of interest. One per line',  required=False)
+group.add_argument('-s', help='Used to supply one server of interest inline',  required=False)
+group.add_argument('-r', help='Used to supply a CIDR range of potential targets',  required=False)
+parser.add_argument('-b', help='Debugging',  required=False, action='store_true')
+parser.add_argument('-a', help='Used for audit purposes, this will print the details of each identified service.',  required=False, action='store_true')
+parser.add_argument('-u', help='The username to authenticate to targets\nExample: DOMAIN\username',  required=True)
+parser.add_argument('-p', help='The password to authenticate to targets',  required=True)
+group2.add_argument('-nl', help='Used to supply a file containing names of interest. One per line',  required=False)
+group2.add_argument('-n', help='Used to supply one name of interest inline',  required=False)
+args = vars(parser.parse_args())
+
+
+def percentage(part, whole):
+	return int(round(100 * float(part)/float(whole)))
+
+
+def are_you_up(ip):
+	rangei = ['0.1', '0.2', '0.3', '0.4', '0.5']
+	try:
+		s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		socketTimeout = random.choice(rangei)
+		s.settimeout(float(socketTimeout))
+		s.connect((ip, 135))
+		sys.stdout.write("\r")
+		return True
+	except socket.error, e:
+		items = ['/', '\\', '|']
+		sys.stdout.write("\r{}".format(random.choice(items)))
+		sys.stdout.flush()
+
+
+def get_ups(serverList):
+	ips = []
+	print '\nChecking Who\'s Alive\n'
+	for ip in serverList:
+		if are_you_up(ip):
+			ips.append(ip)
+	print 'The Following Hosts Are Up.\n'
+	for ip in ips:
+		print ip
+	return ips
+
+
+def unique(seq):
+	seen = set()
+	seen_add = seen.add
+	return [ x for x in seq if x not in seen and not seen_add(x)]
+
+
+def name_list(filename):
+	try:
+		name_list = [line.rstrip('\n') for line in open(filename)]
+	except Exception, e:
+		print e
+	return name_list
+
+
+def server_list(filename):
+	if os.path.exists(filename):
+		try:
+			server_list = [line.rstrip('\n') for line in open(filename)]
+		except Exception, e:
+			traceback.print_exc()
+	else:
+		print 'ERROR!\n\tThe Filename: {} in \'-sl\' does not exist.\n\tPlease check and try again.'.format(filename)
+		sys.exit()
+	return server_list
+
+
+def action_range(ip_range):
+	ip_range_expanded = []
+	for cidr_object in ip_range:
+		for ip_addy in netaddr.IPNetwork(cidr_object):
+			ip_range_expanded.append(str(ip_addy))
+	return unique(ip_range_expanded)
+
+
+def wmi_check(serverList, nameList, user, password):
+
+	alldata = []
+	print '\nGathering Service Data'
+	for server in serverList:
+		print '\n' + str(server)
+		for name in nameList:
+			connected, sid_v = get_sid(server, user, password)
+			if connected:
+				luser_name = get_user(server, user, password, sid_v)
+			else:
+				luser_name = 'none'
+
+			try:
+				cmd='wmic -U \'{u}%{p}\' //{s} "Select DisplayName, PathName, ProcessId, Description, startname from win32_service where startname Like \'%{n}%\'"'.format(s=server,u=user,p=password,n=name)
+				if args['b']:
+					print '\nVerbose Output\n\tService Enumeration:'
+					print '\t\tCompleted'
+				process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+				output = process.communicate()[0]
+				lines = output.splitlines()
+				alldata.append((server, lines[2], luser_name))
+			except IndexError, e:
+				pass
+			except Exception, e:
+				print 'ERROR:'
+				print server
+				print e
+				continue
+	print '\n'
+	return alldata
+
+
+def get_sid(server,user,password):
+	connected = False
+	command_check = "net rpc registry enumerate 'HKEY_USERS' -S {s} -U '{u}%{p}'".format(s=server,u=user,p=password)
+	process_check = subprocess.Popen(command_check, shell=True, stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+	output_check = process_check.communicate()[0]
+	line = output_check.splitlines()
+	j = 0
+	for i in line:
+		if 'NT_STATUS_UNSUCCESSFUL' in i:
+			print 'Unsuccessfull Connection Attempt: {}'.format(server)
+
+		if 'Classes' not in i:
+
+			if args['b']:
+				if j < 1:
+					print '\nVerbose Output\n\tHKEY_USERS Enumeration:\n'
+
+				j += 1
+				print '\t\t' + i
+			pattern = r'(.*?)(S\-\d{1,3}\-\d{1,3}\-\d{1,3}\-)(.*)'
+			matches = re.match(pattern,i)
+
+			if matches:
+
+				sid = matches.group(2) + matches.group(3)
+				connected = True
+				return (connected, sid)
+
+	if not connected:
+		sid = 'Unknown'
+		return (connected, sid)
+
+
+
+def get_user(server, user, password, sid_v):
+	command_check = 'rpcclient -U "{u}%{p}" {s} -c "lookupsids {sid}"'.format(s=server,u=user,p=password, sid=sid_v)
+	process_check = subprocess.Popen(command_check, shell=True, stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+	output_check = process_check.communicate()[0]
+	line = output_check.splitlines()
+	j = 0
+	for i in line:
+		if "Can't load" not in i:
+			pattern = r'(.*?)\s(.*)\s'
+			matches = re.match(pattern,i)
+			if args['b']:
+				if j < 1:
+					print '\nVerbose Output\n\tSID Lookups:\n'
+				j += 1
+				print '\t\tSID: ' + i.split(' ')[0]
+			if matches:
+				user_name = matches.group(2)
+				if args['b']:
+					if j < 1:
+						print '\nVerbose Output\n\tIdentified Users:\n'
+					j += 1
+					print '\t\tUser: ' + user_name
+
+				return user_name
+
+
+if __name__ == "__main__":
+
+	user = args['u']
+	password = args['p']
+	if args['sl']:
+		serverList = server_list(args['sl'])
+		serverList = get_ups(serverList)
+	if args['s']:
+		serverList = [args['s'], ]
+	if args['r']:
+		start_time_scope = time.time()
+		for item in args['r']:
+			if ',' in item:
+				args['r'].append(item.strip(','))
+				args['r'].remove(item)
+		serverList = action_range(args['r'])
+		serverList = get_ups(serverList)
+
+		time_spent_total = time.time() - start_time_scope
+		timetaken = str(datetime.timedelta(seconds=(time_spent_total))).split('.')[0]
+		print '\nComplete: {}'.format(timetaken)
+	if args['nl']:
+		nameList = name_list(args['nl'])
+	if args['n']:
+		nameList = [args['n'], ]
+	services = []
+	final_set = []
+	tiab = []
+	alldata = wmi_check(serverList, nameList, user, password)
+	for item in alldata:
+		final_set.append((item[0], item[1].split('|'), item[2]))
+
+	for value in final_set:
+		Description = value[1][0]
+		DisplayName = value[1][1]
+		IdAccount = value[1][5]
+		PathName = value[1][3]
+		pid = value[1][4]
+		if pid == '0':
+			state = 'stopped'
+		else:
+			state = 'running'
+		tiab.append((pid, value[0], value[2], state, DisplayName, Description, PathName, IdAccount))
+
+	k = 0
+	for item in tiab:
+		if k < 1:
+			print 'Analysis Completed\n'
+		if args['a']:
+			print 'Server: ' + item[1]
+			print 'Logged On: ' + item[2]
+			print 'Account: ' + item[7]
+			print 'Service Name: ' + item[4]
+			print 'Description: ' + item[5]
+			print 'ServicePath: ' + item[6]
+			print 'PID: ' + item[0]
+			print 'State: ' + item[3]
+			print '\n'
+		else:
+			print 'Server: ' + item[1]
+			print 'Logged On: ' + item[2]
+			print 'Account: ' + item[7]
+			print '\n'

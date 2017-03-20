@@ -20,6 +20,6 @@ Venkman requires the 'wmic' client and the 'rpcclient', these are both installed
 
 `sudo pip install venkman`
 
-(2) You should now be able to execute 'bluto' from any working directory in any terminal.
+(2) You should now be able to execute 'venkman' from any working directory in any terminal.
  
 `venkman`

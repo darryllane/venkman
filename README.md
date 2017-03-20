@@ -16,7 +16,7 @@ Note: To test if pip is already installed execute.
 
 Venkman requires the 'wmic' client and the 'rpcclient', these are both installed by default on Kali Linux. If you want to run the tool on any other Unix/Linux platform it should work as long as they are installed and in the env path.
 
-(1) Once `pip` has successfully downloaded and installed, we can install Bluto:
+(1) Once `pip` has successfully downloaded and installed, we can install Venkman:
 
 `sudo pip install venkman`
 

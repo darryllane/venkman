@@ -13,6 +13,8 @@ import time
 import datetime
 import traceback
 from argparse import RawTextHelpFormatter
+
+__version__ = '1.6.5'
 print"""
       (`-.     ('-.      .-')
     _(OO  )_ _(  OO)    ( OO )
@@ -23,29 +25,36 @@ print"""
    \     /__)|  .--'|  |\    ||  .   \ |  |   |  | |  .-.  |  |\    |
     \   /    |  `---|  | \   ||  |\   \|  |   |  | |  | |  |  | \   |
      `-'     `------`--'  `--'`--' '--'`--'   `--' `--' `--`--'  `--'
-"""
-print '''
-Used to identify services being authenticated with accounts of interest.
-Venkman also checks the currently logged in user.
+
+Cause We be hunting Ghosts!
+
+Used to hunt accounts that could be used for privilege escalation. It will check
+services on remote hosts and the current and reacently logged in users for
+accounts of interest.
 
 Author: Darryl Lane
 Twitters: @darryllane101
 Github: https://github.com/darryllane/venkman
+<<<<<<< HEAD
 Version: 0.5
 '''
+=======
+Version: {}
+""".format(__version__)
+
 parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter)
 
 group = parser.add_mutually_exclusive_group(required=True)
 group2 = parser.add_mutually_exclusive_group(required=True)
-group.add_argument('-sl', help='Used to supply a file containing all servers of interest. One per line',  required=False)
-group.add_argument('-s', help='Used to supply one server of interest inline',  required=False)
+group.add_argument('-sl', help='Used to supply a file containing target hosts',  required=False)
+group.add_argument('-s', help='Used to supply one target host inline',  required=False)
 group.add_argument('-r', help='Used to supply a CIDR range of potential targets',  required=False)
 parser.add_argument('-b', help='Debugging',  required=False, action='store_true')
-parser.add_argument('-a', help='Used for audit purposes, this will print the details of each identified service.',  required=False, action='store_true')
-parser.add_argument('-u', help='The username to authenticate to targets\nExample: DOMAIN\username',  required=True)
+parser.add_argument('-a', help='This will print the details of each identified service',  required=False, action='store_true')
+parser.add_argument('-u', help='The username to authenticate to targets Example: DOMAIN\username',  required=True)
 parser.add_argument('-p', help='The password to authenticate to targets',  required=True)
-group2.add_argument('-nl', help='Used to supply a file containing names of interest. One per line',  required=False)
-group2.add_argument('-n', help='Used to supply one name of interest inline',  required=False)
+group2.add_argument('-nl', help='Supply a file containing target accounts',  required=False)
+group2.add_argument('-n', help='Used to supply one target name',  required=False)
 args = vars(parser.parse_args())
 
 
@@ -108,9 +117,8 @@ def server_list(filename):
 
 def action_range(ip_range):
 	ip_range_expanded = []
-	for cidr_object in ip_range:
-		for ip_addy in netaddr.IPNetwork(cidr_object):
-			ip_range_expanded.append(str(ip_addy))
+	for ip_addy in netaddr.IPNetwork(ip_range):
+		ip_range_expanded.append(str(ip_addy))
 	return unique(ip_range_expanded)
 
 
@@ -121,13 +129,26 @@ def wmi_check(serverList, nameList, user, password):
 	for server in serverList:
 		print '\n' + str(server)
 		for name in nameList:
-			connected, sid_v = get_sid(server, user, password)
-			if connected:
-				luser_name = get_user(server, user, password, sid_v)
+			if '\\' in name:
+				name = str(name).split('\\')[1]
+			sid_list = get_sid(server, user, password)
+			if sid_list:
+				luser_name = get_user(server, user, password, sid_list)
+				k = 0
+				for ided_user in luser_name:
+					if name.lower() in ided_user.lower():
+						print 'Logged In: {}'.format(ided_user)
+					else:
+						if args['b']:
+							if k < 1:
+								print '\nVerbose Output:'
+							else:
+								print '\n\tLogged In: {}'.format(ided_user)
 			else:
 				luser_name = 'none'
 
 			try:
+
 				cmd='wmic -U \'{u}%{p}\' //{s} "Select DisplayName, PathName, ProcessId, Description, startname from win32_service where startname Like \'%{n}%\'"'.format(s=server,u=user,p=password,n=name)
 				if args['b']:
 					print '\nVerbose Output\n\tService Enumeration:'
@@ -135,9 +156,12 @@ def wmi_check(serverList, nameList, user, password):
 				process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
 				output = process.communicate()[0]
 				lines = output.splitlines()
-				alldata.append((server, lines[2], luser_name))
-			except IndexError, e:
-				pass
+				if lines[2]:
+					alldata.append((server, lines[2], luser_name))
+
+			except IndexError:
+				alldata.append((server, lines, luser_name))
+				continue
 			except Exception, e:
 				print 'ERROR:'
 				print server
@@ -148,18 +172,19 @@ def wmi_check(serverList, nameList, user, password):
 
 
 def get_sid(server,user,password):
+	users = []
 	connected = False
 	command_check = "net rpc registry enumerate 'HKEY_USERS' -S {s} -U '{u}%{p}'".format(s=server,u=user,p=password)
 	process_check = subprocess.Popen(command_check, shell=True, stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
 	output_check = process_check.communicate()[0]
 	line = output_check.splitlines()
+
 	j = 0
 	for i in line:
 		if 'NT_STATUS_UNSUCCESSFUL' in i:
 			print 'Unsuccessfull Connection Attempt: {}'.format(server)
 
 		if 'Classes' not in i:
-
 			if args['b']:
 				if j < 1:
 					print '\nVerbose Output\n\tHKEY_USERS Enumeration:\n'
@@ -170,41 +195,54 @@ def get_sid(server,user,password):
 			matches = re.match(pattern,i)
 
 			if matches:
-
 				sid = matches.group(2) + matches.group(3)
 				connected = True
-				return (connected, sid)
+				users.append((connected, sid))
 
 	if not connected:
 		sid = 'Unknown'
 		return (connected, sid)
+	return (users)
 
 
 
-def get_user(server, user, password, sid_v):
-	command_check = 'rpcclient -U "{u}%{p}" {s} -c "lookupsids {sid}"'.format(s=server,u=user,p=password, sid=sid_v)
-	process_check = subprocess.Popen(command_check, shell=True, stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
-	output_check = process_check.communicate()[0]
-	line = output_check.splitlines()
-	j = 0
-	for i in line:
-		if "Can't load" not in i:
-			pattern = r'(.*?)\s(.*)\s'
-			matches = re.match(pattern,i)
-			if args['b']:
-				if j < 1:
-					print '\nVerbose Output\n\tSID Lookups:\n'
-				j += 1
-				print '\t\tSID: ' + i.split(' ')[0]
-			if matches:
-				user_name = matches.group(2)
-				if args['b']:
-					if j < 1:
-						print '\nVerbose Output\n\tIdentified Users:\n'
-					j += 1
-					print '\t\tUser: ' + user_name
+def get_user(server, user, password, sid_list):
+	identified_users = []
+	for sid_user in sid_list:
+		try:
+			if sid_user == False:
+				raise Exception('NoUserError')
+			command_check = 'rpcclient -U "{u}%{p}" {s} -c "lookupsids {sid}"'.format(s=server,u=user,p=password, sid=sid_user[1])
+			process_check = subprocess.Popen(command_check, shell=True, stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+			output_check = process_check.communicate()[0]
+			line = output_check.splitlines()
+			j = 0
+			for i in line:
+				if "Can't load" not in i:
+					pattern = r'(.*?)\s(.*)\s'
+					matches = re.match(pattern,i)
+					if args['b']:
+						if j < 1:
+							print '\nVerbose Output\n\tSID Lookups:\n'
+						j += 1
+						print '\t\tSID: ' + i.split(' ')[0]
+					if matches:
+						user_name = matches.group(2)
+						if args['b']:
+							if j < 1:
+								print '\nVerbose Output\n\tIdentified Users:\n'
+							j += 1
+							print '\t\tUser: ' + user_name
+						identified_users.append(user_name)
+		except Exception('NoUserError'):
+			continue
+		except Exception,e:
+			if 'NoUserError' in e:
+				continue
+			else:
+				print e
 
-				return user_name
+	return identified_users
 
 
 if __name__ == "__main__":
@@ -237,19 +275,28 @@ if __name__ == "__main__":
 	tiab = []
 	alldata = wmi_check(serverList, nameList, user, password)
 	for item in alldata:
-		final_set.append((item[0], item[1].split('|'), item[2]))
+		if item[1] == []:
+			final_set.append((item[0], 'None', item[2]))
+		else:
+			final_set.append((item[0], item[1][0].split('|'), item[2]))
+
 
 	for value in final_set:
-		Description = value[1][0]
-		DisplayName = value[1][1]
-		IdAccount = value[1][5]
-		PathName = value[1][3]
-		pid = value[1][4]
-		if pid == '0':
-			state = 'stopped'
-		else:
-			state = 'running'
-		tiab.append((pid, value[0], value[2], state, DisplayName, Description, PathName, IdAccount))
+		try:
+			Description = value[1][0]
+			DisplayName = value[1][1]
+			IdAccount = value[1][5]
+			PathName = value[1][3]
+			pid = value[1][4]
+			if pid == '0':
+				state = 'stopped'
+			else:
+				state = 'running'
+			tiab.append((pid, value[0], value[2], state, DisplayName, Description, PathName, IdAccount))
+		except IndexError:
+			continue
+		except Exception,e:
+			print e
 
 	k = 0
 	for item in tiab:

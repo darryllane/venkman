@@ -14,7 +14,7 @@ import datetime
 import traceback
 from argparse import RawTextHelpFormatter
 
-__version__ = '1.6.4'
+__version__ = '1.6.5'
 print"""
       (`-.     ('-.      .-')
     _(OO  )_ _(  OO)    ( OO )
@@ -25,9 +25,8 @@ print"""
    \     /__)|  .--'|  |\    ||  .   \ |  |   |  | |  .-.  |  |\    |
     \   /    |  `---|  | \   ||  |\   \|  |   |  | |  | |  |  | \   |
      `-'     `------`--'  `--'`--' '--'`--'   `--' `--' `--`--'  `--'
-"""
-print '''
-We be hunting Ghosts!
+
+Cause We be hunting Ghosts!
 
 Used to hunt accounts that could be used for privilege escalation. It will check
 services on remote hosts and the current and reacently logged in users for
@@ -37,20 +36,20 @@ Author: Darryl Lane
 Twitters: @darryllane101
 Github: https://github.com/darryllane/venkman
 Version: {}
-'''.format(__version__)
+""".format(__version__)
 parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter)
 
 group = parser.add_mutually_exclusive_group(required=True)
 group2 = parser.add_mutually_exclusive_group(required=True)
-group.add_argument('-sl', help='Used to supply a file containing all servers of interest. One per line',  required=False)
-group.add_argument('-s', help='Used to supply one server of interest inline',  required=False)
+group.add_argument('-sl', help='Used to supply a file containing target hosts',  required=False)
+group.add_argument('-s', help='Used to supply one target host inline',  required=False)
 group.add_argument('-r', help='Used to supply a CIDR range of potential targets',  required=False)
 parser.add_argument('-b', help='Debugging',  required=False, action='store_true')
-parser.add_argument('-a', help='Used for audit purposes, this will print the details of each identified service.',  required=False, action='store_true')
-parser.add_argument('-u', help='The username to authenticate to targets\nExample: DOMAIN\username',  required=True)
+parser.add_argument('-a', help='This will print the details of each identified service',  required=False, action='store_true')
+parser.add_argument('-u', help='The username to authenticate to targets Example: DOMAIN\username',  required=True)
 parser.add_argument('-p', help='The password to authenticate to targets',  required=True)
-group2.add_argument('-nl', help='Used to supply a file containing names of interest. One per line',  required=False)
-group2.add_argument('-n', help='Used to supply one name of interest inline',  required=False)
+group2.add_argument('-nl', help='Supply a file containing target accounts',  required=False)
+group2.add_argument('-n', help='Used to supply one target name',  required=False)
 args = vars(parser.parse_args())
 
 

@@ -14,7 +14,7 @@ import datetime
 import traceback
 from argparse import RawTextHelpFormatter
 
-__version__ = '1.6.3'
+__version__ = '1.6.4'
 print"""
       (`-.     ('-.      .-')
     _(OO  )_ _(  OO)    ( OO )
@@ -27,8 +27,11 @@ print"""
      `-'     `------`--'  `--'`--' '--'`--'   `--' `--' `--`--'  `--'
 """
 print '''
-Used to identify services being authenticated with accounts of interest.
-Venkman also checks the currently logged in user.
+We be hunting Ghosts!
+
+Used to hunt accounts that could be used for privilege escalation. It will check
+services on remote hosts and the current and reacently logged in users for
+accounts of interest.
 
 Author: Darryl Lane
 Twitters: @darryllane101

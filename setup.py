@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='Venkman',
-    version='1.6',
+    version='1.6.1',
     author='Darryl lane',
     author_email='DarrylLane101@gmail.com',
     url='https://github.com/darryllane/venkman',
@@ -11,7 +11,6 @@ setup(
     license='LICENSE.txt',
     description='''
     Service account and logged in user enumeration. Used to hunt for priv accounts''',
-    long_description=open('README.md').read(),
     scripts=['/'],
     install_requires=[
     ],

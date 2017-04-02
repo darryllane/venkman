@@ -13,6 +13,8 @@ import time
 import datetime
 import traceback
 from argparse import RawTextHelpFormatter
+
+__version__ = '1.6.1'
 print"""
       (`-.     ('-.      .-')
     _(OO  )_ _(  OO)    ( OO )
@@ -31,8 +33,8 @@ Venkman also checks the currently logged in user.
 Author: Darryl Lane
 Twitters: @darryllane101
 Github: https://github.com/darryllane/venkman
-Version: 1.6
-'''
+Version: {}
+'''.format(__version__)
 parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter)
 
 group = parser.add_mutually_exclusive_group(required=True)
@@ -113,7 +115,7 @@ def action_range(ip_range):
 	return unique(ip_range_expanded)
 
 
-def(serverList, nameList, user, password):
+def wmi_check(serverList, nameList, user, password):
 
 	alldata = []
 	print '\nGathering Service Data'

@@ -14,7 +14,7 @@ import datetime
 import traceback
 from argparse import RawTextHelpFormatter
 
-__version__ = '1.6.2'
+__version__ = '1.6.3'
 print"""
       (`-.     ('-.      .-')
     _(OO  )_ _(  OO)    ( OO )

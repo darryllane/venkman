@@ -14,7 +14,9 @@ import datetime
 import traceback
 from argparse import RawTextHelpFormatter
 
+
 __version__ = '1.6.6'
+
 print"""
       (`-.     ('-.      .-')
     _(OO  )_ _(  OO)    ( OO )
@@ -276,7 +278,6 @@ if __name__ == "__main__":
 				final_set.append((item[0], item[1].split('|'), item[2]))
 				continue
 
-
 		except IndexError:
 			for name in nameList:
 				if not item[2][0]:
@@ -317,7 +318,6 @@ if __name__ == "__main__":
 
 		if k < 1:
 			print 'Analysis Completed\n'
-
 
 		if item[0] == 'NoPid':
 			print 'Host: ' + value[0]

@@ -14,7 +14,7 @@ import datetime
 import traceback
 from argparse import RawTextHelpFormatter
 
-__version__ = '1.6.4'
+__version__ = '1.6.6'
 print"""
       (`-.     ('-.      .-')
     _(OO  )_ _(  OO)    ( OO )
@@ -25,9 +25,8 @@ print"""
    \     /__)|  .--'|  |\    ||  .   \ |  |   |  | |  .-.  |  |\    |
     \   /    |  `---|  | \   ||  |\   \|  |   |  | |  | |  |  | \   |
      `-'     `------`--'  `--'`--' '--'`--'   `--' `--' `--`--'  `--'
-"""
-print '''
-We be hunting Ghosts!
+
+Cause We be hunting Ghosts!
 
 Used to hunt accounts that could be used for privilege escalation. It will check
 services on remote hosts and the current and reacently logged in users for
@@ -37,20 +36,20 @@ Author: Darryl Lane
 Twitters: @darryllane101
 Github: https://github.com/darryllane/venkman
 Version: {}
-'''.format(__version__)
+""".format(__version__)
 parser = argparse.ArgumentParser(formatter_class=RawTextHelpFormatter)
 
 group = parser.add_mutually_exclusive_group(required=True)
 group2 = parser.add_mutually_exclusive_group(required=True)
-group.add_argument('-sl', help='Used to supply a file containing all servers of interest. One per line',  required=False)
-group.add_argument('-s', help='Used to supply one server of interest inline',  required=False)
+group.add_argument('-sl', help='Used to supply a file containing target hosts',  required=False)
+group.add_argument('-s', help='Used to supply one target host inline',  required=False)
 group.add_argument('-r', help='Used to supply a CIDR range of potential targets',  required=False)
 parser.add_argument('-b', help='Debugging',  required=False, action='store_true')
-parser.add_argument('-a', help='Used for audit purposes, this will print the details of each identified service.',  required=False, action='store_true')
-parser.add_argument('-u', help='The username to authenticate to targets\nExample: DOMAIN\username',  required=True)
+parser.add_argument('-a', help='This will print the details of each identified service',  required=False, action='store_true')
+parser.add_argument('-u', help='The username to authenticate to targets Example: DOMAIN\username',  required=True)
 parser.add_argument('-p', help='The password to authenticate to targets',  required=True)
-group2.add_argument('-nl', help='Used to supply a file containing names of interest. One per line',  required=False)
-group2.add_argument('-n', help='Used to supply one name of interest inline',  required=False)
+group2.add_argument('-nl', help='Supply a file containing target accounts',  required=False)
+group2.add_argument('-n', help='Used to supply one target name',  required=False)
 args = vars(parser.parse_args())
 
 
@@ -121,7 +120,7 @@ def action_range(ip_range):
 def wmi_check(serverList, nameList, user, password):
 
 	alldata = []
-	print '\nGathering Service Data'
+	print '\nGathering Data'
 	for server in serverList:
 		print '\n' + str(server)
 		for name in nameList:
@@ -144,8 +143,8 @@ def wmi_check(serverList, nameList, user, password):
 				luser_name = 'none'
 
 			try:
-
 				cmd='wmic -U \'{u}%{p}\' //{s} "Select DisplayName, PathName, ProcessId, Description, startname from win32_service where startname Like \'%{n}%\'"'.format(s=server,u=user,p=password,n=name)
+
 				if args['b']:
 					print '\nVerbose Output\n\tService Enumeration:'
 					print '\t\tCompleted'
@@ -271,45 +270,81 @@ if __name__ == "__main__":
 	tiab = []
 	alldata = wmi_check(serverList, nameList, user, password)
 	for item in alldata:
-		if item[1] == []:
-			final_set.append((item[0], 'None', item[2]))
-		else:
-			final_set.append((item[0], item[1][0].split('|'), item[2]))
-
-
-	for value in final_set:
 		try:
-			Description = value[1][0]
-			DisplayName = value[1][1]
-			IdAccount = value[1][5]
-			PathName = value[1][3]
-			pid = value[1][4]
-			if pid == '0':
-				state = 'stopped'
-			else:
-				state = 'running'
-			tiab.append((pid, value[0], value[2], state, DisplayName, Description, PathName, IdAccount))
+
+			if not item[1][0]:
+				final_set.append((item[0], item[1].split('|'), item[2]))
+				continue
+
+
 		except IndexError:
-			continue
+			for name in nameList:
+				if not item[2][0]:
+					pass
+				else:
+					if name in item[2][0]:
+						if not item[1]:
+							if item[2]:
+								final_set.append((item[0], 'No Service Data', item[2]))
 		except Exception,e:
 			print e
+			if args['b']:
+				print e
+			continue
+
+	for value in final_set:
+		if value[1] == 'No Service Data':
+			tiab.append(('NoPid', value[0], value[2], 'NoState', 'NoDisplay', 'NoDescription', 'NoPath', 'NoIdAccount'))
+		else:
+			try:
+				Description = value[1][0]
+				DisplayName = value[1][1]
+				IdAccount = value[1][5]
+				PathName = value[1][3]
+				pid = value[1][4]
+				if pid == '0':
+					state = 'stopped'
+				else:
+					state = 'running'
+				tiab.append((pid, value[0], value[2], state, DisplayName, Description, PathName, IdAccount))
+			except IndexError:
+				continue
+			except Exception,e:
+				print e
 
 	k = 0
 	for item in tiab:
+
 		if k < 1:
 			print 'Analysis Completed\n'
+
+
+		if item[0] == 'NoPid':
+			print 'Host: ' + value[0]
+			print 'Users Logged In: '
+			for name in value[2]:
+				print '\t' + name
 		if args['a']:
-			print 'Server: ' + item[1]
-			print 'Logged On: ' + item[2]
-			print 'Account: ' + item[7]
-			print 'Service Name: ' + item[4]
-			print 'Description: ' + item[5]
-			print 'ServicePath: ' + item[6]
-			print 'PID: ' + item[0]
-			print 'State: ' + item[3]
-			print '\n'
+			if item[0] == 'NoPid':
+				pass
+			else:
+				print 'Server: ' + item[1]
+				print 'Logged On:'
+				if item[2]:
+					for name in item[2]:
+						print '\t' + name
+				print 'Account: ' + item[7]
+				print 'Service Name: ' + item[4]
+				print 'Description: ' + item[5]
+				print 'ServicePath: ' + item[6]
+				print 'PID: ' + item[0]
+				print 'State: ' + item[3]
+				print '\n'
 		else:
-			print 'Server: ' + item[1]
-			print 'Logged On: ' + item[2]
-			print 'Account: ' + item[7]
-			print '\n'
+			if item[0] == 'NoPid':
+				pass
+			else:
+				print 'Server: ' + item[1]
+				print 'Logged On: ' + item[2]
+				print 'Account: ' + item[7]
+				print '\n'

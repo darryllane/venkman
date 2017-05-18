@@ -37,10 +37,7 @@ accounts of interest.
 Author: Darryl Lane
 Twitters: @darryllane101
 Github: https://github.com/darryllane/venkman
-<<<<<<< HEAD
-Version: 0.5
-'''
-=======
+
 Version: {}
 """.format(__version__)
 

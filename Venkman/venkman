@@ -14,7 +14,9 @@ import datetime
 import traceback
 from argparse import RawTextHelpFormatter
 
-__version__ = '1.6.5'
+
+__version__ = '1.6.7'
+
 print"""
       (`-.     ('-.      .-')
     _(OO  )_ _(  OO)    ( OO )
@@ -26,10 +28,10 @@ print"""
     \   /    |  `---|  | \   ||  |\   \|  |   |  | |  | |  |  | \   |
      `-'     `------`--'  `--'`--' '--'`--'   `--' `--' `--`--'  `--'
 
-Cause We be hunting Ghosts!
+Cause We be hunting ghosts!
 
 Used to hunt accounts that could be used for privilege escalation. It will check
-services on remote hosts and the current and reacently logged in users for
+services on remote hosts and the current and recently logged in users for
 accounts of interest.
 
 Author: Darryl Lane
@@ -99,7 +101,7 @@ def name_list(filename):
 	try:
 		name_list = [line.rstrip('\n') for line in open(filename)]
 	except Exception, e:
-		print e
+		print traceback.print_exc()
 	return name_list
 
 
@@ -125,49 +127,63 @@ def action_range(ip_range):
 def wmi_check(serverList, nameList, user, password):
 
 	alldata = []
-	print '\nGathering Service Data'
+	print '\nGathering Data'
 	for server in serverList:
 		print '\n' + str(server)
-		for name in nameList:
-			if '\\' in name:
-				name = str(name).split('\\')[1]
-			sid_list = get_sid(server, user, password)
-			if sid_list:
-				luser_name = get_user(server, user, password, sid_list)
-				k = 0
-				for ided_user in luser_name:
-					if name.lower() in ided_user.lower():
-						print 'Logged In: {}'.format(ided_user)
-					else:
-						if args['b']:
-							if k < 1:
-								print '\nVerbose Output:'
+		sid_list = get_sid(server, user, password)
+		if sid_list[0]:
+			luser_name = get_user(server, user, password, sid_list)
+
+			k = 0
+			for name in nameList:
+				if '\\' in name:
+					name = str(name).split('\\')[1]
+				elif name == '':
+					pass
+				else:
+					if luser_name:
+						for ided_user in luser_name:
+							if name.lower() in ided_user.lower():
+								print 'Logged In: {}'.format(ided_user)
 							else:
-								print '\n\tLogged In: {}'.format(ided_user)
-			else:
-				luser_name = 'none'
-
+								if args['b']:
+									if k < 1:
+										print '\nVerbose Output:'
+									else:
+										print '\n\tLogged In: {}'.format(ided_user)
+					else:
+						luser_name = ['none']
+		for name in nameList:
 			try:
-
 				cmd='wmic -U \'{u}%{p}\' //{s} "Select DisplayName, PathName, ProcessId, Description, startname from win32_service where startname Like \'%{n}%\'"'.format(s=server,u=user,p=password,n=name)
+				if args['b']:
+					print '\nVerbose Output\n\tWMIC Command:'
+					print '\t\t', cmd
 				if args['b']:
 					print '\nVerbose Output\n\tService Enumeration:'
 					print '\t\tCompleted'
-				process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+				process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 				output = process.communicate()[0]
 				lines = output.splitlines()
-				if lines[2]:
-					alldata.append((server, lines[2], luser_name))
+				if 'ERROR' in lines[2]:
+					pass
+				else :
+					if lines[2]:
+						alldata.append((server, lines[2], luser_name))
 
 			except IndexError:
-				alldata.append((server, lines, luser_name))
-				continue
+				if 'ERROR' in lines:
+					pass
+				else :
+					alldata.append((server, lines, luser_name))
+					continue
 			except Exception, e:
 				print 'ERROR:'
 				print server
-				print e
+				print traceback.print_exc()
 				continue
 	print '\n'
+	alldata = sorted(alldata)
 	return alldata
 
 
@@ -175,12 +191,14 @@ def get_sid(server,user,password):
 	users = []
 	connected = False
 	command_check = "net rpc registry enumerate 'HKEY_USERS' -S {s} -U '{u}%{p}'".format(s=server,u=user,p=password)
-	process_check = subprocess.Popen(command_check, shell=True, stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+	process_check = subprocess.Popen(command_check, shell=True, stdout=subprocess.PIPE,stderr=subprocess.PIPE)
 	output_check = process_check.communicate()[0]
 	line = output_check.splitlines()
 
 	j = 0
 	for i in line:
+		if '0x800706ba' in i:
+			print 'RPC Unavailable'
 		if 'NT_STATUS_UNSUCCESSFUL' in i:
 			print 'Unsuccessfull Connection Attempt: {}'.format(server)
 
@@ -218,31 +236,42 @@ def get_user(server, user, password, sid_list):
 			line = output_check.splitlines()
 			j = 0
 			for i in line:
-				if "Can't load" not in i:
-					pattern = r'(.*?)\s(.*)\s'
-					matches = re.match(pattern,i)
-					if args['b']:
-						if j < 1:
-							print '\nVerbose Output\n\tSID Lookups:\n'
-						j += 1
-						print '\t\tSID: ' + i.split(' ')[0]
-					if matches:
-						user_name = matches.group(2)
+				if 'INVALID' in i:
+					user_name = 'None'
+				else:
+					if "Can't load" not in i:
+						pattern = r'(.*?)\s(.*)\s'
+						matches = re.match(pattern,i)
 						if args['b']:
 							if j < 1:
-								print '\nVerbose Output\n\tIdentified Users:\n'
+								print '\nVerbose Output\n\tSID Lookups:\n'
 							j += 1
-							print '\t\tUser: ' + user_name
-						identified_users.append(user_name)
+							print '\t\tSID: ' + i.split(' ')[0]
+						if matches:
+							user_name = matches.group(2)
+							if args['b']:
+								if j < 1:
+									print '\nVerbose Output\n\tIdentified Users:\n'
+								j += 1
+								print '\t\tUser: ' + user_name
+							identified_users.append(user_name)
 		except Exception('NoUserError'):
 			continue
 		except Exception,e:
 			if 'NoUserError' in e:
 				continue
 			else:
-				print e
+				print traceback.print_exc()
 
 	return identified_users
+
+def clean(data_list):
+	results = []
+	for item in data_list:
+		if item not in results:
+			results.append(item)
+
+	return results
 
 
 if __name__ == "__main__":
@@ -274,46 +303,95 @@ if __name__ == "__main__":
 	final_set = []
 	tiab = []
 	alldata = wmi_check(serverList, nameList, user, password)
+	alldata = clean(alldata)
+	if args['b']:
+		print 'Verbose Output:'
+		print '\t', alldata
 	for item in alldata:
-		if item[1] == []:
-			final_set.append((item[0], 'None', item[2]))
-		else:
-			final_set.append((item[0], item[1][0].split('|'), item[2]))
+		if args['b']:
+			print 'Verbose Output:'
+			print '\t', item
+		try:
+			if isinstance(item[1][0], list):
+				if 'error' in str(item[1][0]).lower():
+					pass
+				else:
+					final_set.append((item[0], str(item[1][0]).split('|'), item[2]))
+			else:
+				if 'error' in str(item[1]).lower():
+					pass
+				else:
+					final_set.append((item[0], item[1].split('|'), item[2]))
+				continue
 
+		except IndexError:
+			for name in nameList:
+				if not item[2][0]:
+					pass
+				else:
+					if name in item[2][0]:
+						final_set.append((item[0], 'No Service Data', item[2]))
+		except Exception,e:
+			print traceback.print_exc()
+			if args['b']:
+				print traceback.print_exc()
+			continue
 
 	for value in final_set:
-		try:
-			Description = value[1][0]
-			DisplayName = value[1][1]
-			IdAccount = value[1][5]
-			PathName = value[1][3]
-			pid = value[1][4]
-			if pid == '0':
-				state = 'stopped'
-			else:
-				state = 'running'
-			tiab.append((pid, value[0], value[2], state, DisplayName, Description, PathName, IdAccount))
-		except IndexError:
-			continue
-		except Exception,e:
-			print e
+		if value[1] == 'No Service Data':
+			tiab.append(('NoPid', value[0], value[2], 'NoState', 'NoDisplay', 'NoDescription', 'NoPath', 'NoIdAccount'))
+		else:
+			try:
+				Description = value[1][0]
+				DisplayName = value[1][1]
+				IdAccount = value[1][5]
+				PathName = value[1][3]
+				pid = value[1][4]
+				if pid == '0':
+					state = 'stopped'
+				else:
+					state = 'running'
+				tiab.append((pid, value[0], value[2], state, DisplayName, Description, PathName, IdAccount))
+			except IndexError:
+				continue
+			except Exception,e:
+				print traceback.print_exc()
 
 	k = 0
 	for item in tiab:
 		if k < 1:
-			print 'Analysis Completed\n'
+			print '\nService Analysis Completed\n'
+
 		if args['a']:
-			print 'Server: ' + item[1]
-			print 'Logged On: ' + item[2]
-			print 'Account: ' + item[7]
-			print 'Service Name: ' + item[4]
-			print 'Description: ' + item[5]
-			print 'ServicePath: ' + item[6]
-			print 'PID: ' + item[0]
-			print 'State: ' + item[3]
-			print '\n'
+			if item[0] == 'NoPid':
+				print 'Host: ' + item[1]
+				print 'Users Logged In: '
+				for name in item[2]:
+					print '\t' + name
+			else:
+				print '\nServer: ' + item[1]
+				print 'Logged On:'
+				if item[2]:
+					for name in item[2]:
+						print '\t' + name
+				print 'Account: ' + item[7]
+				print 'Service Name: ' + item[4]
+				print 'Description: ' + item[5]
+				print 'ServicePath: ' + item[6]
+				print 'PID: ' + item[0]
+				print 'State: ' + item[3]
+				print '\n'
 		else:
-			print 'Server: ' + item[1]
-			print 'Logged On: ' + item[2]
-			print 'Account: ' + item[7]
-			print '\n'
+			if item[0] == 'NoPid':
+				print 'Host: ' + item[1]
+				print 'Users Logged In: '
+				for name in item[2]:
+					print '\t' + name
+			else:
+				print '\nServer: ' + item[1]
+				print 'Logged On: '
+				for name in item[2]:
+					print '\t' + name
+				print 'Service Account: ' + item[7]
+				print '\n'
+		k += 1

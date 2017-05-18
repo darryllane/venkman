@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='Venkman',
-    version='1.6.5',
+    version='1.6.7',
     author='Darryl lane',
     author_email='DarrylLane101@gmail.com',
     url='https://github.com/darryllane/venkman',
